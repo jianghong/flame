@@ -1,4 +1,5 @@
 #![allow(unused)]
+#![feature(thread_id_value)]
 
 //! Here's an example of how to use some of FLAMEs APIs:
 //!
@@ -43,7 +44,6 @@
 
 #[macro_use]
 extern crate lazy_static;
-extern crate thread_id;
 
 #[cfg(feature = "json")]
 #[macro_use]
@@ -61,10 +61,12 @@ use std::borrow::Cow;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use std::io::{Write, Error as IoError};
+use std::num::NonZeroU64;
+use std::thread;
 
 pub type StrCow = Cow<'static, str>;
 
-lazy_static!(static ref ALL_THREADS: Mutex<Vec<(usize, Option<String>, PrivateFrame)>> = Mutex::new(Vec::new()););
+lazy_static!(static ref ALL_THREADS: Mutex<Vec<(NonZeroU64, Option<String>, PrivateFrame)>> = Mutex::new(Vec::new()););
 thread_local!(static LIBRARY: RefCell<Library> = RefCell::new(Library::new()));
 
 #[derive(Debug)]
@@ -143,7 +145,7 @@ pub struct Note {
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "json", derive(Serialize))]
 pub struct Thread {
-    pub id: usize,
+    pub id: NonZeroU64,
     pub name: Option<String>,
     pub spans: Vec<Span>,
     #[cfg_attr(feature = "json", serde(skip_serializing))]
@@ -286,7 +288,7 @@ fn commit_impl(library: &mut Library) {
 
     if let Ok(mut handle) = ALL_THREADS.lock() {
         let thread_name = library.name.clone();
-        let thread_id = ::thread_id::get();
+        let thread_id = thread::current().id().as_u64();
         handle.push((thread_id, thread_name, frame))
     }
 }
@@ -476,7 +478,7 @@ pub fn threads() -> Vec<Thread> {
     if ::std::thread::panicking() { return vec![]; }
 
     let my_thread_name = ::std::thread::current().name().map(Into::into);
-    let my_thread_id = ::thread_id::get();
+    let my_thread_id = thread::current().id().as_u64();
 
     let mut out = vec![ Thread {
         id: my_thread_id,
